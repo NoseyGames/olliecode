@@ -80,7 +80,7 @@ function supportsAvx2() {
   return false
 }
 
-const names = (() => {
+function packageNames() {
   if (nodeBuild) return [base]
   const baseline = arch === "x64" && !supportsAvx2()
   if (platform === "linux") {
@@ -106,9 +106,13 @@ const names = (() => {
       : [base, `${base}-musl`]
   }
   return arch === "x64" ? (baseline ? [`${base}-baseline`, base] : [base, `${base}-baseline`]) : [base]
-})()
+}
+
+// Cached and explicitly selected executables need no CPU/libc probing (PowerShell on Windows).
+let names
 
 function findBinary(startDir) {
+  names = packageNames()
   let current = startDir
   for (;;) {
     const modules = path.join(current, "node_modules")

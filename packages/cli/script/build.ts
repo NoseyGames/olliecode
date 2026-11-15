@@ -8,7 +8,6 @@ import { Script } from "@opencode/script"
 import { embed } from "@opencode/script/highlights"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 import type { BunPlugin } from "bun"
-import pkg from "../package.json"
 import { discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@opencode/plugin/runtime-modules"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
@@ -70,8 +69,14 @@ const targets =
 if (!targets.length) throw new Error(`Unknown build target: ${requestedTarget}`)
 
 // Bun 1.4.4 skips native packages for the other libc by default, but the musl targets need them.
-if (!skipInstall)
-  await $`bun install --os="*" --cpu="*" --libc="*" @opentui/core@${pkg.dependencies["@opentui/core"]} @opencode/pty@${pkg.dependencies["@opencode/pty"]}`
+if (!skipInstall) {
+  const nativeOnly = targets.every(
+    (target) => target.os === process.platform && target.arch === process.arch && target.abi === undefined,
+  )
+  // Host builds do not need native libraries for every OS, CPU and libc.
+  if (nativeOnly) await $`bun install --frozen-lockfile`
+  else await $`bun install --frozen-lockfile --os="*" --cpu="*" --libc="*"`
+}
 const appArchive = path.join(dir, ".cache", "bun-app-archive.bin")
 await Bun.write(appArchive, await buildAppArchive(Script.channel, Script.version, { skipBuild: skipWebUi }))
 const appAssetsPlugin: BunPlugin = {

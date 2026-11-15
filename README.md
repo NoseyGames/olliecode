@@ -16,13 +16,30 @@ Release signing keys, the license Worker, the R2 release feed, private infrastru
 
 ## Build
 
-`ash
-bun install
-bun --cwd packages/cli build
-bun --cwd packages/desktop build
-`
+Use the pinned Bun version from `package.json` (1.4.4).
 
-The desktop build produces `packages/desktop/out`. The CLI build produces `packages/cli/dist`. A signed release requires your own Ed25519 key and integrity manifest; a development build does not.
+```sh
+bun install --frozen-lockfile
+# Build for the current machine instead of every release platform:
+bun --cwd packages/cli run build --single
+bun --cwd packages/desktop run build
+```
+
+For a CLI-only build without the embedded browser UI, add `--skip-web-ui`.
+Use `--skip-install` only after installing dependencies yourself.
+Cross-platform release builds remain available by omitting `--single`.
+Native builds install host-compatible dependencies; release builds install the target platform libraries.
+
+The desktop build produces `packages/desktop/out`. The CLI build produces
+`packages/cli/dist`. A signed release requires your own Ed25519 key and integrity
+manifest; a development build does not.
+
+## Windows folder launcher
+
+Run `shortcuts/launch.cmd` to choose the last folder, current folder, or a native
+folder picker, then start or continue a CLI session. It adds no third-party
+libraries. See [launcher instructions](shortcuts/README.md) for executable selection,
+private-server mode, and checks. The existing desktop shortcut remains available.
 
 ## Free models
 

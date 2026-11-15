@@ -52,6 +52,11 @@ const teamPath = path.resolve(import.meta.dir, "../../../.github/TEAM_MEMBERS")
 const team = [
   ...(await Bun.file(teamPath)
     .text()
+    .catch((error: NodeJS.ErrnoException) => {
+      // Public source exports omit GitHub metadata. Attribution is optional for local builds.
+      if (error.code === "ENOENT") return ""
+      throw error
+    })
     .then((x) => x.split(/\r?\n/).map((x) => x.trim()))
     .then((x) => x.filter((x) => x && !x.startsWith("#")))),
   ...bot,

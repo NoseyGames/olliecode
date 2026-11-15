@@ -49,7 +49,10 @@ const targets = requested
     : allTargets
 
 process.chdir(dir)
-if (!skipInstall) run(process.execPath, ["install", "--os=*", "--cpu=*"])
+if (!skipInstall) {
+  const nativeOnly = targets.every((target) => target.platform === process.platform && target.arch === process.arch)
+  run(process.execPath, ["install", "--frozen-lockfile", ...(nativeOnly ? [] : ["--os=*", "--cpu=*"])])
+}
 if (appArchiveOnly) {
   if (!archivePath) throw new Error("--app-archive-only requires OPENCODE_APP_ARCHIVE")
   await mkdir(path.dirname(archivePath), { recursive: true })
