@@ -6,6 +6,7 @@ Run: powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 [CmdletBinding()]
 param(
     [string]$InstallDir = "$env:LOCALAPPDATA\Programs\olliEcode-Source",
+    [switch]$Resume,
     [switch]$NoLaunch
 )
 
@@ -51,8 +52,11 @@ try {
     }
     $InstallDir = [IO.Path]::GetFullPath($InstallDir)
     # Never merge a fresh build into an existing source or installation directory.
-    if (Test-Path -LiteralPath $InstallDir) {
-        throw "Destination already exists: $InstallDir. Use -InstallDir with a new directory."
+    if ((Test-Path -LiteralPath $InstallDir) -and -not $Resume) {
+        throw "Destination already exists: $InstallDir. Use -Resume to retry this installation."
+    }
+    if ($Resume -and -not (Test-Path -LiteralPath (Join-Path $InstallDir 'source\.git'))) {
+        throw 'Resume requires an existing source checkout. Use a new -InstallDir for a fresh installation.'
     }
     Require-Tool git.exe Git.Git
     Require-Tool node.exe OpenJS.NodeJS.LTS
@@ -60,8 +64,22 @@ try {
     New-Item -ItemType Directory -Path $work -Force | Out-Null
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     $source = Join-Path $InstallDir 'source'
-    Write-Host 'Downloading olliEcode source...'
-    Invoke-Checked git.exe @('clone', '--depth', '1', 'https://github.com/NoseyGames/olliecode.git', $source)
+    if ($Resume -and (Test-Path -LiteralPath $source)) {
+        if (-not (Test-Path -LiteralPath (Join-Path $source '.git'))) { throw 'Resume requires an existing Git checkout.' }
+        $remote = & git.exe -C $source remote get-url origin
+        if ($LASTEXITCODE -ne 0 -or $remote -ne 'https://github.com/NoseyGames/olliecode.git') {
+            throw 'Resume requires the original NoseyGames/olliecode checkout.'
+        }
+        Invoke-Checked git.exe @('-C', $source, 'diff', '--quiet')
+        Invoke-Checked git.exe @('-C', $source, 'diff', '--cached', '--quiet')
+        $branch = & git.exe -C $source branch --show-current
+        if ($LASTEXITCODE -ne 0 -or $branch -ne 'main') { throw 'Resume requires the main branch.' }
+        Write-Host 'Updating the existing source checkout...'
+        Invoke-Checked git.exe @('-C', $source, 'pull', '--ff-only', 'origin', 'main')
+    } else {
+        Write-Host 'Downloading olliEcode source...'
+        Invoke-Checked git.exe @('clone', '--depth', '1', '--branch', 'main', 'https://github.com/NoseyGames/olliecode.git', $source)
+    }
 
     $manifest = Get-Content -LiteralPath (Join-Path $source 'package.json') -Raw | ConvertFrom-Json
     if ($manifest.packageManager -notmatch '^bun@(\d+\.\d+\.\d+)$') {
@@ -74,7 +92,7 @@ try {
     Write-Host "Downloading Bun $bunVersion..."
     Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/oven-sh/bun/releases/download/bun-v$bunVersion/$bunArchiveName.zip" -OutFile $bunZip
     $toolsDir = Join-Path $InstallDir 'tools'
-    Expand-Archive -LiteralPath $bunZip -DestinationPath $toolsDir
+    Expand-Archive -LiteralPath $bunZip -DestinationPath $toolsDir -Force
     $bun = Join-Path $toolsDir "$bunArchiveName\bun.exe"
     if (-not (Test-Path -LiteralPath $bun)) { throw 'The Bun archive did not contain bun.exe.' }
     $env:PATH = (Split-Path $bun) + ';' + $env:PATH
@@ -118,7 +136,7 @@ try {
         Start-Process -FilePath $electron -ArgumentList ('"' + $desktop + '"') -WorkingDirectory $desktop -WindowStyle Hidden
     }
 } catch {
-    Write-Error "Installation stopped: $($_.Exception.Message) Files were retained at $InstallDir for inspection. Rerun with a new -InstallDir after resolving the error." -ErrorAction Continue
+    Write-Error "Installation stopped: $($_.Exception.Message) Files were retained at $InstallDir for inspection. Rerun with -Resume after resolving the error." -ErrorAction Continue
     exit 1
 } finally {
     if ($pushed) { Pop-Location }
