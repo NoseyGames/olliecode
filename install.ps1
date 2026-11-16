@@ -95,6 +95,8 @@ try {
     Expand-Archive -LiteralPath $bunZip -DestinationPath $toolsDir -Force
     $bun = Join-Path $toolsDir "$bunArchiveName\bun.exe"
     if (-not (Test-Path -LiteralPath $bun)) { throw 'The Bun archive did not contain bun.exe.' }
+    # Bun selects its package-runner mode when invoked as bunx.exe.
+    Copy-Item -LiteralPath $bun -Destination (Join-Path (Split-Path $bun) 'bunx.exe') -Force
     $env:PATH = (Split-Path $bun) + ';' + $env:PATH
     $env:OPENCODE_CHANNEL = 'local'
     $env:OPENCODE_TARGET = $null
@@ -117,6 +119,8 @@ try {
     # Resolve through the desktop package so Bun workspace hoisting is supported.
     Push-Location $desktop
     try {
+        # First resolution may download Electron and print progress to stdout.
+        Invoke-Checked node.exe @('-e', "require('electron')")
         $electron = & node.exe -p "require('electron')"
         if ($LASTEXITCODE -ne 0) { throw 'Electron runtime resolution failed.' }
         $electron = ($electron | Out-String).Trim()
