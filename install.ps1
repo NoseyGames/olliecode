@@ -28,15 +28,40 @@ function Update-ProcessPath {
 
 function Require-Tool {
     param([string]$Name, [string]$Package)
+    Update-ProcessPath
+    Find-InstalledTool $Name
     if (Get-Command $Name -ErrorAction SilentlyContinue) { return }
     if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
         throw "Install $Package and rerun this script. Automatic setup requires winget (App Installer)."
     }
-    Invoke-Checked winget.exe @('install', '--id', $Package, '--exact', '--source', 'winget',
+    & winget.exe @('install', '--id', $Package, '--exact', '--source', 'winget',
         '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity')
+    $installExitCode = $LASTEXITCODE
     Update-ProcessPath
+    Find-InstalledTool $Name
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        throw "$Package was installed but $Name is not on PATH. Open a new PowerShell window and rerun."
+        throw "$Name is still unavailable after Winget (exit $installExitCode). Install $Package or add its installation directory to PATH, then rerun with -Resume."
+    }
+}
+
+function Find-InstalledTool {
+    param([string]$Name)
+    if (Get-Command $Name -ErrorAction SilentlyContinue) { return }
+    # Installers can omit PATH registration, or the invoking shell can have an old PATH.
+    $relativePaths = switch ($Name) {
+        'git.exe' { 'Git\cmd'; 'Programs\Git\cmd' }
+        'node.exe' { 'nodejs'; 'Programs\nodejs' }
+        default { return }
+    }
+    foreach ($root in @($env:ProgramW6432, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA)) {
+        if (-not $root) { continue }
+        foreach ($relative in $relativePaths) {
+            $directory = Join-Path $root $relative
+            if (Test-Path -LiteralPath (Join-Path $directory $Name) -PathType Leaf) {
+                $env:PATH = $directory + ';' + $env:PATH
+                return
+            }
+        }
     }
 }
 
